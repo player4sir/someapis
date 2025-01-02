@@ -1,5 +1,6 @@
 aiohttp
 beautifulsoup4
+brotli
 fastapi
 pydantic
 python-dotenv
