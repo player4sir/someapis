@@ -1,0 +1,14 @@
+flask
+flask-restx
+aiohttp
+asyncio
+requests
+python-multipart
+aiodns
+beautifulsoup4
+python-dotenv
+gunicorn
+Werkzeug
+urllib3
+chardet
+fake-useragent
