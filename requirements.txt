@@ -12,3 +12,4 @@ Werkzeug
 urllib3
 chardet
 fake-useragent
+Brotli
