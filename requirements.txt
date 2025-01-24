@@ -1,10 +1,10 @@
-flask>=2.0.1
-flask-restful>=0.3.9
-aiohttp>=3.8.1
+flask==2.0.1
+flask-restful==0.3.9
+aiohttp==3.8.1
 python-multipart
 beautifulsoup4
 python-dotenv
-urllib3
+urllib3<2.0.0
 chardet
 fake-useragent
 Brotli

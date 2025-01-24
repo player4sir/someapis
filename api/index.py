@@ -35,19 +35,34 @@ def require_api_key(f):
         return {"message": "Invalid API key"}, 401
     return wrapper
 
-async def run_async(coro):
-    """运行异步代码的辅助函数"""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+def get_or_create_eventloop():
     try:
-        return await coro
-    finally:
-        loop.close()
+        return asyncio.get_event_loop()
+    except RuntimeError as ex:
+        if "There is no current event loop in thread" in str(ex):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            return loop
+        raise
+
+def run_async(coro):
+    """运行异步代码的辅助函数"""
+    try:
+        loop = get_or_create_eventloop()
+        return loop.run_until_complete(coro)
+    except Exception as e:
+        logger.error(f"Error in run_async: {str(e)}")
+        raise
 
 # Error handlers
 @app.errorhandler(APIError)
 def handle_api_error(error):
     return error.to_dict(), error.status_code
+
+@app.errorhandler(Exception)
+def handle_exception(error):
+    logger.error(f"Unhandled exception: {str(error)}", exc_info=True)
+    return {"message": str(error)}, 500
 
 # Enable CORS
 @app.after_request
@@ -77,7 +92,7 @@ class YouTubeDownload(Resource):
             url = args['url']
 
             downloader = YouTubeDownloader()
-            result = asyncio.run(downloader.get_download_url(url))
+            result = run_async(downloader.get_download_url(url))
             logger.info(f"Successfully processed YouTube URL: {url}")
             return result
         except ValueError as e:
@@ -95,7 +110,7 @@ class TwitterDownload(Resource):
             url = args['url']
 
             parser = TwitterParser()
-            result = asyncio.run(parser.get_download_url(url))
+            result = run_async(parser.get_download_url(url))
             logger.info(f"Successfully processed Twitter URL: {url}")
             return result
         except Exception as e:
@@ -111,7 +126,7 @@ class TiktokDownload(Resource):
             url = args['url']
 
             downloader = TiktokDownloader()
-            result = asyncio.run(downloader.get_download_url(url))
+            result = run_async(downloader.get_download_url(url))
             logger.info(f"Successfully processed TikTok URL: {url}")
             return result
         except Exception as e:
@@ -127,7 +142,7 @@ class QishuiDownload(Resource):
             url = args['url']
 
             parser = QishuiParser()
-            result = asyncio.run(parser.get_download_url(url))
+            result = run_async(parser.get_download_url(url))
             logger.info(f"Successfully processed Qishui URL: {url}")
             return result
         except Exception as e:
@@ -143,12 +158,12 @@ class UniversalDownload(Resource):
             url = args['url']
 
             downloader = EasyDownloaderAPI()
-            result = asyncio.run(downloader.get_download_links(url))
+            result = run_async(downloader.get_download_links(url))
             logger.info(f"Successfully processed URL: {url}")
             return result
         except Exception as e:
             logger.error(f"Error processing URL: {url}", exc_info=True)
-            raise DownloadError()
+            raise DownloadError(str(e))
 
 # 注册路由
 api.add_resource(Root, '/api/')
