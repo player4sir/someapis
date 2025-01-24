@@ -1,10 +1,9 @@
-import aiohttp
+import requests
 import time
 import json
 import base64
 import hashlib
 from urllib.parse import urlparse
-import traceback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -85,7 +84,7 @@ class EasyDownloaderAPI:
         }
 
     async def get_download_links(self, video_url):
-        """Parse video URL asynchronously"""
+        """Parse video URL"""
         try:
             key = self._generate_key(video_url)
             if not key:
@@ -97,30 +96,32 @@ class EasyDownloaderAPI:
                 "key": key
             }
 
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{self.base_url}{self.extract_path}",
-                    headers=self.headers,
-                    json=payload,
-                    timeout=30
-                ) as response:
-                    if response.status != 200:
-                        return {
-                            "status": "error",
-                            "message": f"Request failed with status {response.status}"
-                        }
+            response = requests.post(
+                f"{self.base_url}{self.extract_path}",
+                headers=self.headers,
+                json=payload,
+                timeout=30,
+                allow_redirects=True
+            )
 
-                    try:
-                        json_data = await response.json()
-                        return self._process_response(json_data)
-                    except json.JSONDecodeError as e:
-                        logger.error(f"JSON decode error: {str(e)}")
-                        return {
-                            "status": "error",
-                            "message": f"Failed to parse response: {str(e)}"
-                        }
+            try:
+                return self._process_response(response.json())
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON decode error: {str(e)}")
+                return {
+                    "status": "error",
+                    "message": f"Failed to parse response: {str(e)}"
+                }
+            except Exception as e:
+                logger.error(f"Response processing error: {str(e)}")
+                return {
+                    "status": "error",
+                    "message": f"Failed to process response: {str(e)}"
+                }
 
-        except aiohttp.ClientError as e:
+        except requests.exceptions.Timeout:
+            return {"status": "error", "message": "Request timeout"}
+        except requests.exceptions.RequestException as e:
             return {"status": "error", "message": f"Request failed: {str(e)}"}
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
