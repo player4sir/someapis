@@ -44,6 +44,15 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Methods', '*')
     return response
 
+def run_async(coro):
+    """运行异步代码的辅助函数"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
 class Root(Resource):
     @require_api_key
     def get(self):
@@ -64,7 +73,7 @@ class Download(Resource):
             url = args['url']
 
             downloader = YouTubeDownloader()
-            result = asyncio.run(downloader.get_download_url(url))
+            result = run_async(downloader.get_download_url(url))
             logger.info(f"Successfully processed URL: {url}")
             return result
         except ValueError as e:
