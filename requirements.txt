@@ -1,5 +1,5 @@
-flask
-flask-restx
+flask>=2.0.1
+flask-restful>=0.3.9
 aiohttp
 asyncio
 requests

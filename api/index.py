@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from flask_restx import Api, Resource, fields
+from flask_restful import Api, Resource, reqparse
 import asyncio
 import logging
 import sys
@@ -17,19 +17,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-api = Api(app, 
-    version='1.0',
-    title='Video Downloader API',
-    description='Video Downloader API for multiple platforms',
-    doc='/docs'
-)
+api = Api(app)
 
-ns = api.namespace('api', description='Video operations')
-
-# API Models
-url_model = api.model('URL', {
-    'url': fields.String(required=True, description='Video URL')
-})
+# 请求参数解析
+url_parser = reqparse.RequestParser()
+url_parser.add_argument('url', type=str, required=True, help='Video URL is required')
 
 def require_api_key(f):
     def wrapper(*args, **kwargs):
@@ -52,49 +44,145 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Methods', '*')
     return response
 
-@ns.route('/')
 class Root(Resource):
-    @ns.doc(security='apikey')
     @require_api_key
     def get(self):
         """首页"""
         return {"message": "Video Downloader API is running"}
 
-@ns.route('/-/health')
 class Health(Resource):
     def get(self):
         """健康检查"""
         return {"status": "ok"}
 
-@ns.route('/download')
 class Download(Resource):
-    @ns.expect(url_model)
-    @ns.doc('下载视频',
-        security='apikey',
-        responses={
-            200: 'Success',
-            400: 'Invalid URL',
-            401: 'Authentication failed',
-            404: 'Video not found',
-            500: 'Server Error'
-        })
     @require_api_key
     def post(self):
         """下载视频"""
         try:
-            data = request.get_json()
-            if not data or 'url' not in data:
-                raise InvalidURLError("URL is required")
+            args = url_parser.parse_args()
+            url = args['url']
 
             downloader = YouTubeDownloader()
-            result = asyncio.run(downloader.get_download_url(data['url']))
-            logger.info(f"Successfully processed URL: {data['url']}")
+            result = asyncio.run(downloader.get_download_url(url))
+            logger.info(f"Successfully processed URL: {url}")
             return result
         except ValueError as e:
             raise InvalidURLError()
         except Exception as e:
-            logger.error(f"Error processing URL: {data['url']}", exc_info=True)
+            logger.error(f"Error processing URL: {url}", exc_info=True)
             raise DownloadError()
+
+# 注册路由
+api.add_resource(Root, '/api/')
+api.add_resource(Health, '/api/-/health')
+api.add_resource(Download, '/api/download')
+
+# 添加Swagger UI路由
+@app.route('/docs')
+def docs():
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Video Downloader API Documentation</title>
+        <meta charset="utf-8"/>
+        <link rel="stylesheet" type="text/css" href="//unpkg.com/swagger-ui-dist@3/swagger-ui.css" />
+    </head>
+    <body>
+        <div id="swagger-ui"></div>
+        <script src="//unpkg.com/swagger-ui-dist@3/swagger-ui-bundle.js"></script>
+        <script>
+            const ui = SwaggerUIBundle({
+                url: "/api/swagger.json",
+                dom_id: '#swagger-ui',
+            })
+        </script>
+    </body>
+    </html>
+    """
+
+@app.route('/api/swagger.json')
+def swagger():
+    return {
+        "openapi": "3.0.0",
+        "info": {
+            "title": "Video Downloader API",
+            "version": "1.0.0"
+        },
+        "paths": {
+            "/api/": {
+                "get": {
+                    "summary": "首页",
+                    "security": [{"apiKey": []}],
+                    "responses": {
+                        "200": {
+                            "description": "Success"
+                        }
+                    }
+                }
+            },
+            "/api/-/health": {
+                "get": {
+                    "summary": "健康检查",
+                    "responses": {
+                        "200": {
+                            "description": "Success"
+                        }
+                    }
+                }
+            },
+            "/api/download": {
+                "post": {
+                    "summary": "下载视频",
+                    "security": [{"apiKey": []}],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "url": {
+                                            "type": "string",
+                                            "description": "Video URL"
+                                        }
+                                    },
+                                    "required": ["url"]
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Success"
+                        },
+                        "400": {
+                            "description": "Invalid URL"
+                        },
+                        "401": {
+                            "description": "Authentication failed"
+                        },
+                        "404": {
+                            "description": "Video not found"
+                        },
+                        "500": {
+                            "description": "Server Error"
+                        }
+                    }
+                }
+            }
+        },
+        "components": {
+            "securitySchemes": {
+                "apiKey": {
+                    "type": "apiKey",
+                    "name": "X-API-KEY",
+                    "in": "header"
+                }
+            }
+        }
+    }
 
 # For local development
 if __name__ == '__main__':
