@@ -6,7 +6,6 @@ load_dotenv()
 
 class Config:
     # API配置
-    API_KEY = os.getenv('API_KEY')
     PORT = int(os.getenv('PORT', 5000))
     DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
