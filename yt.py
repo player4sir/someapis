@@ -1,7 +1,8 @@
-import requests
+import aiohttp
 import time
 import json
 import base64
+import re
 from typing import Dict, Any
 import logging
 
@@ -14,72 +15,79 @@ class YouTubeDownloader:
         }
         self.max_retries = 3
 
-    def _generate_key(self) -> str:
-        """Generate key for request"""
-        return str(int(time.time() * 1000))
+    def _extract_video_id(self, url: str) -> str:
+        """Extract YouTube video ID from URL"""
+        patterns = [
+            r'youtu\.be\/([a-zA-Z0-9\-\_]{11})',
+            r'youtube\.com\/shorts\/([a-zA-Z0-9\-\_]{11})',
+            r'v=([a-zA-Z0-9\-\_]{11})'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+        return None
 
-    def _check_progress(self, progress_url: str) -> Dict[str, Any]:
-        """Check conversion progress synchronously"""
+    async def _check_progress(self, progress_url: str) -> Dict[str, Any]:
+        """Check conversion progress asynchronously"""
         retry_count = 0
-        
-        while retry_count < self.max_retries:
-            try:
-                init_key = self._generate_key()
-                params = {
-                    "_": str(int(time.time() * 1000)),
-                    "k": base64.b64encode(init_key.encode()).decode()
-                }
-                
-                response = requests.get(
-                    progress_url, 
-                    headers=self.headers,
-                    params=params,
-                    timeout=10
-                )
-                
-                if response.status_code != 200:
-                    raise Exception(f"Progress check failed with status code: {response.status_code}")
-                
+        async with aiohttp.ClientSession() as session:
+            while retry_count < self.max_retries:
                 try:
-                    text = response.text
-                    # 处理转义字符
-                    text = text.replace('\\u0026', '&')
-                    data = json.loads(text)
+                    params = {
+                        "_": str(int(time.time() * 1000)),
+                    }
                     
-                    error = int(data.get("error", 0))
-                    progress = int(data.get("progress", 0))
-                    
-                    if error > 0:
-                        raise Exception(f"Conversion error: {error}")
-                    
-                    if progress >= 3:
-                        return data
-                    
-                    time.sleep(3)
+                    async with session.get(
+                        progress_url, 
+                        headers=self.headers,
+                        params=params,
+                        timeout=10
+                    ) as response:
+                        if response.status != 200:
+                            raise Exception(f"Progress check failed with status code: {response.status}")
+                        
+                        text = await response.text()
+                        data = json.loads(text)
+                        
+                        if data.get("status") == "ok":
+                            return data
+                        
+                        retry_count += 1
+                        if retry_count >= self.max_retries:
+                            break
+                            
+                except Exception as e:
+                    logger.error(f"Error checking progress: {str(e)}")
                     retry_count += 1
-                    
-                except json.JSONDecodeError as e:
-                    raise Exception(f"Failed to parse progress response: {text}")
-                
-            except Exception as e:
-                logger.error(f"Error checking progress: {str(e)}")
-                retry_count += 1
-                if retry_count >= self.max_retries:
-                    raise
-                time.sleep(3)
-        
-        raise Exception("Max retries reached")
+                    if retry_count >= self.max_retries:
+                        raise
+            
+            raise Exception("Max retries reached")
 
-    def get_download_url(self, url: str) -> Dict[str, Any]:
-        """Get download URL synchronously"""
+    async def get_download_url(self, url: str) -> Dict[str, Any]:
+        """Get download URL asynchronously"""
         try:
-            # 这里实现同步的下载逻辑
-            # 示例返回数据结构
-            return {
-                "title": "Video Title",
-                "url": url,
-                "download_url": "https://example.com/video.mp4"
-            }
+            video_id = self._extract_video_id(url)
+            if not video_id:
+                raise ValueError("Invalid YouTube URL")
+
+            async with aiohttp.ClientSession() as session:
+                # 这里实现实际的YouTube下载逻辑
+                # 示例: 获取视频信息
+                info_url = f"https://www.youtube.com/get_video_info?video_id={video_id}"
+                async with session.get(info_url, headers=self.headers) as response:
+                    if response.status != 200:
+                        raise Exception("Failed to get video info")
+                    
+                    # 处理响应并返回下载信息
+                    return {
+                        "title": f"Video {video_id}",
+                        "url": url,
+                        "download_url": f"https://youtube.com/watch?v={video_id}"
+                    }
+
         except Exception as e:
             logger.error(f"Error getting download URL: {str(e)}")
             raise

@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_restful import Api, Resource, reqparse
+import asyncio
 import logging
 import sys
 import os
@@ -10,6 +11,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import Config
 from errors import InvalidURLError, VideoNotFoundError, DownloadError, APIError
 from yt import YouTubeDownloader
+from twitter import TwitterParser
+from tiktok import TiktokDownloader
+from qishui import QishuiParser
+from easy_downloader import EasyDownloaderAPI
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -29,6 +34,15 @@ def require_api_key(f):
             return f(*args, **kwargs)
         return {"message": "Invalid API key"}, 401
     return wrapper
+
+async def run_async(coro):
+    """运行异步代码的辅助函数"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return await coro
+    finally:
+        loop.close()
 
 # Error handlers
 @app.errorhandler(APIError)
@@ -54,20 +68,84 @@ class Health(Resource):
         """健康检查"""
         return {"status": "ok"}
 
-class Download(Resource):
+class YouTubeDownload(Resource):
     @require_api_key
     def post(self):
-        """下载视频"""
+        """下载YouTube视频"""
         try:
             args = url_parser.parse_args()
             url = args['url']
 
             downloader = YouTubeDownloader()
-            result = downloader.get_download_url(url)
-            logger.info(f"Successfully processed URL: {url}")
+            result = asyncio.run(downloader.get_download_url(url))
+            logger.info(f"Successfully processed YouTube URL: {url}")
             return result
         except ValueError as e:
             raise InvalidURLError()
+        except Exception as e:
+            logger.error(f"Error processing YouTube URL: {url}", exc_info=True)
+            raise DownloadError()
+
+class TwitterDownload(Resource):
+    @require_api_key
+    def post(self):
+        """下载Twitter视频"""
+        try:
+            args = url_parser.parse_args()
+            url = args['url']
+
+            parser = TwitterParser()
+            result = asyncio.run(parser.get_download_url(url))
+            logger.info(f"Successfully processed Twitter URL: {url}")
+            return result
+        except Exception as e:
+            logger.error(f"Error processing Twitter URL: {url}", exc_info=True)
+            raise DownloadError()
+
+class TiktokDownload(Resource):
+    @require_api_key
+    def post(self):
+        """下载TikTok视频"""
+        try:
+            args = url_parser.parse_args()
+            url = args['url']
+
+            downloader = TiktokDownloader()
+            result = asyncio.run(downloader.get_download_url(url))
+            logger.info(f"Successfully processed TikTok URL: {url}")
+            return result
+        except Exception as e:
+            logger.error(f"Error processing TikTok URL: {url}", exc_info=True)
+            raise DownloadError()
+
+class QishuiDownload(Resource):
+    @require_api_key
+    def post(self):
+        """下载汽水音乐"""
+        try:
+            args = url_parser.parse_args()
+            url = args['url']
+
+            parser = QishuiParser()
+            result = asyncio.run(parser.get_download_url(url))
+            logger.info(f"Successfully processed Qishui URL: {url}")
+            return result
+        except Exception as e:
+            logger.error(f"Error processing Qishui URL: {url}", exc_info=True)
+            raise DownloadError()
+
+class UniversalDownload(Resource):
+    @require_api_key
+    def post(self):
+        """通用视频下载"""
+        try:
+            args = url_parser.parse_args()
+            url = args['url']
+
+            downloader = EasyDownloaderAPI()
+            result = asyncio.run(downloader.get_download_links(url))
+            logger.info(f"Successfully processed URL: {url}")
+            return result
         except Exception as e:
             logger.error(f"Error processing URL: {url}", exc_info=True)
             raise DownloadError()
@@ -75,7 +153,11 @@ class Download(Resource):
 # 注册路由
 api.add_resource(Root, '/api/')
 api.add_resource(Health, '/api/-/health')
-api.add_resource(Download, '/api/download')
+api.add_resource(YouTubeDownload, '/api/youtube/download')
+api.add_resource(TwitterDownload, '/api/twitter/download')
+api.add_resource(TiktokDownload, '/api/tiktok/download')
+api.add_resource(QishuiDownload, '/api/qishui/download')
+api.add_resource(UniversalDownload, '/api/universal/download')
 
 # 添加Swagger UI路由
 @app.route('/docs')
@@ -131,9 +213,169 @@ def swagger():
                     }
                 }
             },
-            "/api/download": {
+            "/api/youtube/download": {
                 "post": {
-                    "summary": "下载视频",
+                    "summary": "下载YouTube视频",
+                    "security": [{"apiKey": []}],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "url": {
+                                            "type": "string",
+                                            "description": "Video URL"
+                                        }
+                                    },
+                                    "required": ["url"]
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Success"
+                        },
+                        "400": {
+                            "description": "Invalid URL"
+                        },
+                        "401": {
+                            "description": "Authentication failed"
+                        },
+                        "404": {
+                            "description": "Video not found"
+                        },
+                        "500": {
+                            "description": "Server Error"
+                        }
+                    }
+                }
+            },
+            "/api/twitter/download": {
+                "post": {
+                    "summary": "下载Twitter视频",
+                    "security": [{"apiKey": []}],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "url": {
+                                            "type": "string",
+                                            "description": "Video URL"
+                                        }
+                                    },
+                                    "required": ["url"]
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Success"
+                        },
+                        "400": {
+                            "description": "Invalid URL"
+                        },
+                        "401": {
+                            "description": "Authentication failed"
+                        },
+                        "404": {
+                            "description": "Video not found"
+                        },
+                        "500": {
+                            "description": "Server Error"
+                        }
+                    }
+                }
+            },
+            "/api/tiktok/download": {
+                "post": {
+                    "summary": "下载TikTok视频",
+                    "security": [{"apiKey": []}],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "url": {
+                                            "type": "string",
+                                            "description": "Video URL"
+                                        }
+                                    },
+                                    "required": ["url"]
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Success"
+                        },
+                        "400": {
+                            "description": "Invalid URL"
+                        },
+                        "401": {
+                            "description": "Authentication failed"
+                        },
+                        "404": {
+                            "description": "Video not found"
+                        },
+                        "500": {
+                            "description": "Server Error"
+                        }
+                    }
+                }
+            },
+            "/api/qishui/download": {
+                "post": {
+                    "summary": "下载汽水音乐",
+                    "security": [{"apiKey": []}],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "url": {
+                                            "type": "string",
+                                            "description": "Video URL"
+                                        }
+                                    },
+                                    "required": ["url"]
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Success"
+                        },
+                        "400": {
+                            "description": "Invalid URL"
+                        },
+                        "401": {
+                            "description": "Authentication failed"
+                        },
+                        "404": {
+                            "description": "Video not found"
+                        },
+                        "500": {
+                            "description": "Server Error"
+                        }
+                    }
+                }
+            },
+            "/api/universal/download": {
+                "post": {
+                    "summary": "通用视频下载",
                     "security": [{"apiKey": []}],
                     "requestBody": {
                         "required": True,
