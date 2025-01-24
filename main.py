@@ -75,7 +75,34 @@ api = Api(app,
     - 汽水音乐(抖音音乐)下载
     - 通用视频下载
     ''',
-    doc='/docs'
+    doc='/docs',
+    authorizations={
+        'apikey': {
+            'type': 'apiKey',
+            'in': 'header',
+            'name': 'X-API-KEY',
+            'description': '访问 API 需要的密钥'
+        }
+    },
+    security='apikey',
+    errors={
+        'APIError': {
+            'message': '服务器内部错误',
+            'status': 500,
+        },
+        'InvalidURLError': {
+            'message': '无效的 URL 格式',
+            'status': 400,
+        },
+        'VideoNotFoundError': {
+            'message': '视频/音频未找到',
+            'status': 404,
+        },
+        'DownloadError': {
+            'message': '下载失败',
+            'status': 500,
+        }
+    }
 )
 
 # 添加全局错误处理
@@ -126,7 +153,8 @@ def require_api_key(func):
 
 # 定义命名空间
 ns = api.namespace('api', 
-    description='下载器 API 接口'
+    description='下载器 API 接口',
+    decorators=[require_api_key]
 )
 
 # 定义请求模型
@@ -146,6 +174,8 @@ def after_request(response):
 
 @ns.route('/')
 class Root(Resource):
+    @ns.doc(security='apikey')
+    @require_api_key
     def get(self):
         """首页"""
         return {"message": "Video Downloader API is running"}
@@ -160,12 +190,15 @@ class Health(Resource):
 class Download(Resource):
     @ns.expect(url_model)
     @ns.doc('下载视频',
+        security='apikey',
         responses={
             200: 'Success',
             400: 'Invalid URL',
+            401: 'Authentication failed',
             404: 'Video not found',
             500: 'Server Error'
         })
+    @require_api_key
     def post(self):
         """下载YouTube视频"""
         try:
@@ -187,12 +220,15 @@ class Download(Resource):
 class TwitterDownload(Resource):
     @ns.expect(url_model)
     @ns.doc('下载Twitter视频',
+        security='apikey',
         responses={
             200: 'Success',
             400: 'Invalid URL',
+            401: 'Authentication failed',
             404: 'Video not found',
             500: 'Server Error'
         })
+    @require_api_key
     def post(self):
         """下载Twitter视频"""
         try:
@@ -214,12 +250,14 @@ class TwitterDownload(Resource):
 class TiktokDownload(Resource):
     @ns.expect(url_model)
     @ns.doc('下载TikTok视频',
+        security='apikey',
         responses={
             200: 'Success',
             400: 'Invalid URL',
-            404: 'Video not found',
+            401: 'Invalid or missing API key',
             500: 'Server Error'
         })
+    @require_api_key
     def post(self):
         """下载TikTok视频"""
         try:
@@ -239,12 +277,14 @@ class TiktokDownload(Resource):
 class EasyDownload(Resource):
     @ns.expect(url_model)
     @ns.doc('通用视频下载',
+        security='apikey',
         responses={
             200: 'Success',
             400: 'Invalid URL',
-            404: 'Video not found',
+            401: 'Authentication failed',
             500: 'Server Error'
         })
+    @require_api_key
     def post(self):
         """通用视频下载接口"""
         try:
@@ -274,6 +314,7 @@ class QishuiParseAPI(Resource):
         responses={
             200: '解析成功',
             400: '无效的汽水音乐链接',
+            401: '未授权访问',
             404: '音乐未找到',
             500: '服务器错误'
         })
