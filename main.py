@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_restx import Api, Resource, fields, reqparse
-from yt import YouTubeDownloader
+from yt import YouTubeMP3Converter
 from twitter import TwitterParser
 from tiktok import TiktokDownloader
 from easy_downloader import EasyDownloaderAPI
@@ -189,7 +189,7 @@ class Health(Resource):
 @ns.route('/download')
 class Download(Resource):
     @ns.expect(url_model)
-    @ns.doc('下载视频',
+    @ns.doc('下载YouTube视频',
         security='apikey',
         responses={
             200: 'Success',
@@ -206,15 +206,20 @@ class Download(Resource):
             if not data or 'url' not in data:
                 raise InvalidURLError("URL is required")
 
-            downloader = YouTubeDownloader()
-            result = asyncio.run(downloader.get_download_url(data['url']))
-            logger.info(f"Successfully processed YouTube URL: {data['url']}")
-            return result
+            downloader = YouTubeMP3Converter()
+            result = downloader.get_download_url(data['url'])
+            
+            if result['status'] == 'success':
+                logger.info(f"Successfully processed YouTube URL: {data['url']}")
+                return result
+            else:
+                raise DownloadError(result.get('message', 'Unknown error'))
+                
         except ValueError as e:
-            raise InvalidURLError()
+            raise InvalidURLError(str(e))
         except Exception as e:
             logger.error(f"Error processing YouTube URL: {data['url']}", exc_info=True)
-            raise DownloadError()
+            raise DownloadError(str(e))
 
 @ns.route('/twitter/download')
 class TwitterDownload(Resource):
