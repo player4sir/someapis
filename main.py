@@ -15,6 +15,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from logging.config import dictConfig
 from werkzeug.exceptions import HTTPException
 from qishui import QishuiParser
+from spotify import SpotifyDownloader
 
 # 配置日志
 dictConfig({
@@ -73,6 +74,7 @@ api = Api(app,
     - Twitter 视频下载
     - TikTok 视频下载
     - 汽水音乐(抖音音乐)下载
+    - Spotify 音乐下载
     - 通用视频下载
     ''',
     doc='/docs',
@@ -354,6 +356,49 @@ class QishuiParseAPI(Resource):
             raise APIError(str(e), 400)
         except VideoNotFoundError as e:
             raise APIError(str(e), 404)
+        except Exception as e:
+            logger.error(f"解析失败: {str(e)}")
+            raise APIError("解析失败", 500)
+
+@ns.route('/spotify/download')
+class SpotifyDownloadAPI(Resource):
+    @api.doc('download_spotify',
+        description='解析 Spotify 音乐链接，获取下载链接',
+        responses={
+            200: '解析成功',
+            400: '无效的 Spotify 链接',
+            401: '未授权访问',
+            500: '服务器错误'
+        })
+    @api.expect(url_model)
+    def post(self):
+        """
+        解析 Spotify 音乐链接
+        
+        支持的链接格式:
+        * https://open.spotify.com/track/xxx
+        * https://open.spotify.com/album/xxx
+        """
+        data = api.payload
+        if not data or 'url' not in data:
+            raise InvalidURLError("URL is required")
+            
+        url = data['url'].strip()
+
+        try:
+            if 'spotify.com' not in url:
+                raise InvalidURLError("仅支持 Spotify 链接")
+                
+            downloader = SpotifyDownloader()
+            result = downloader.get_download_links(url)
+            
+            if result['status'] == 'success':
+                return result
+            else:
+                raise APIError(result['message'], 500)
+
+        except InvalidURLError as e:
+            raise APIError(str(e), 400)
         except Exception as e:
             logger.error(f"解析失败: {str(e)}")
             raise APIError("解析失败", 500)
